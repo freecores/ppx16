@@ -18,7 +18,7 @@ begin
 
 	p1 : entity work.P16C55 port map (Clk, Reset_n, T0CKI, Port_A, Port_B, Port_C);
 
-	as : AsyncStim generic map(FileName => "PPX16.vhd", InterCharDelay => 300 us, Baud => 48000, Bits => 8)
+	as : AsyncStim generic map(FileName => "../../../rtl/vhdl/PPX16.vhd", InterCharDelay => 300 us, Baud => 48000, Bits => 8)
 				port map(Port_A(1));
 
 	al : AsyncLog generic map(FileName => "RX_Log.txt", Baud => 48000, Bits => 8)

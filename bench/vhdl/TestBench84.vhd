@@ -19,5 +19,6 @@ begin
 
 	Clk <= not Clk after 50 ns;
 	Reset_n <= '1' after 200 ns;
+	INT <= not INT after 20 us;
 
 end;
