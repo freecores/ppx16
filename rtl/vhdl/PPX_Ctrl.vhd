@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0222
+-- Version : 0224
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -38,7 +38,7 @@
 -- you have the latest version of this file.
 --
 -- The latest version of this file can be found at:
---	http://www.opencores.org/cvsweb.shtml/t51/
+--	http://www.opencores.org/cvsweb.shtml/ppx16/
 --
 -- Limitations :
 --	Registers implemented in this entity are INDF, PCL, STATUS, FSR, (PCLATH)
@@ -56,6 +56,7 @@ entity PPX_Ctrl is
 	);
 	port(
 		Clk			: in std_logic;
+		Reset_n		: in std_logic;
 		ROM_Data	: in std_logic_vector(InstructionLength - 1 downto 0);
 		Inst		: in std_logic_vector(InstructionLength - 1 downto 0);
 		Skip		: in std_logic;
@@ -86,9 +87,16 @@ begin
 					Inst(11 downto 10) = "11" or
 					(Inst(11 downto 10) = "00" and Inst(5) = '0' and Inst(9 downto 6) /= "0000") else '0';
 		IRet <= '0';
-		process (Clk)
+		process (Reset_n, Clk)
 		begin
-			if Clk'event and Clk = '1' then
+			if Reset_n = '0' then
+				File_Wr <= '0';
+				Goto <= '0';
+				Push <= '0';
+				Pop <= '0';
+				A2Res <= '0';
+				B2Res <= '0';
+			elsif Clk'event and Clk = '1' then
 				File_Wr <= '0';
 				Goto <= '0';
 				Push <= '0';
@@ -131,9 +139,16 @@ begin
 		W_Wr <= '1' when Inst(13 downto 12) = "11" or
 					(Inst(13 downto 12) = "00" and Inst(7) = '0' and Inst(11 downto 8) /= "0000") else '0';
 		IRet <= '1' when Inst(13 downto 0) = "00000000001001" else '0'; -- RETFIE
-		process (Clk)
+		process (Reset_n, Clk)
 		begin
-			if Clk'event and Clk = '1' then
+			if Reset_n = '0' then
+				File_Wr <= '0';
+				Goto <= '0';
+				Push <= '0';
+				Pop <= '0';
+				A2Res <= '0';
+				B2Res <= '0';
+			elsif Clk'event and Clk = '1' then
 				File_Wr <= '0';
 				Goto <= '0';
 				Push <= '0';

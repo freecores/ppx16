@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0222
+-- Version : 0224
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -38,7 +38,7 @@
 -- you have the latest version of this file.
 --
 -- The latest version of this file can be found at:
---	http://www.opencores.org/cvsweb.shtml/t51/
+--	http://www.opencores.org/cvsweb.shtml/ppx16/
 --
 -- Limitations :
 --	Registers implemented in this entity are INDF, PCL, STATUS, FSR, (PCLATH)
@@ -291,6 +291,7 @@ begin
 		generic map(InstructionLength => InstructionLength)
 		port map(
 			Clk => Clk,
+			Reset_n => Reset_n,
 			ROM_Data => ROM_Data,
 			Inst => Inst,
 			Skip => Inst_Skip,

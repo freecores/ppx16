@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0222
+-- Version : 0224
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -38,7 +38,7 @@
 -- you have the latest version of this file.
 --
 -- The latest version of this file can be found at:
---	http://www.opencores.org/cvsweb.shtml/t51/
+--	http://www.opencores.org/cvsweb.shtml/ppx16/
 --
 -- Limitations :
 --
@@ -74,6 +74,7 @@ package PPX_Pack is
 	);
 	port(
 		Clk			: in std_logic;
+		Reset_n			: in std_logic;
 		ROM_Data	: in std_logic_vector(InstructionLength - 1 downto 0);
 		Inst		: in std_logic_vector(InstructionLength - 1 downto 0);
 		Skip		: in std_logic;
