@@ -7,4 +7,4 @@ move exemplar.log ..\log\p16f84_leo.srp
 
 cd ..\run
 
-p16f84 p16f84.edf xc2s200-pq208-5
+p16f84 p16f84_leo.edf xc2s200-pq208-5

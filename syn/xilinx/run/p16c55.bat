@@ -11,9 +11,11 @@ cd ..\out
 
 if "%1" == "" goto xst
 
+set name=p16c55_leo
+
 copy ..\bin\%name%.pin %name%.ucf
 
-ngdbuild -p %target% %1
+ngdbuild -p %target% %1 %name%.ngd
 
 goto builddone
 
@@ -30,10 +32,10 @@ ngdbuild -p %target% %name%.ngc
 
 move %name%.bld ..\log
 
-map -p %target% -cm speed -c 100 -tx on -o %name%_map %name%
-move %name%_map.mrp ..\log
+map -p %target% -cm speed -c 100 -timing -tx on -o %name%_map %name%
+move %name%_map.mrp ..\log\%name%.mrp
 
-par -ol 2 -xe 0 -t 1 -c 0 %name%_map -w %name%
+par -ol 3 -t 1 -c 0 %name%_map -w %name%
 move %name%.par ..\log
 
 trce %name%.ncd -o ../log/%name%.twr %name%_map.pcf
