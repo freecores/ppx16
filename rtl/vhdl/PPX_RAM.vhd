@@ -73,7 +73,6 @@ architecture rtl of PPX_RAM is
 	signal	RAM			: RAM_Image;
 	signal	AddrRd		: std_logic_vector(AddrWidth - 1 downto 0);
 	signal	AddrWr		: std_logic_vector(AddrWidth - 1 downto 0);
-	signal	Tmp_Data	: std_logic_vector(7 downto 0);
 
 begin
 
@@ -90,7 +89,7 @@ begin
 
 	Data_Out <= RAM(to_integer(unsigned(AddrRd)))
 -- pragma translate_off
-		when to_integer(unsigned(Addr)) >= Bottom and to_integer(unsigned(Addr)) <= Top else "--------"
+		when to_integer(unsigned(AddrRd)) >= Bottom and to_integer(unsigned(AddrRd)) <= Top else "--------"
 -- pragma translate_on
 	;
 

@@ -1,7 +1,7 @@
 --
 -- PIC16F84 compatible microcontroller core
 --
--- Version : 0220
+-- Version : 0222
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -86,20 +86,29 @@ architecture rtl of P16F84 is
 	signal	Instruction	: std_logic_vector(InstructionLength - 1 downto 0);
 	signal	File_Addr	: std_logic_vector(InstructionLength - 6 downto 0);
 	signal	File_Addr_r	: std_logic_vector(InstructionLength - 6 downto 0);
-	signal	File_CS		: std_logic_vector(6 downto 5);
 	signal	TMR_CS		: std_logic;
 	signal	RAM_CS		: std_logic;
-	signal	File_Rd		: std_logic;
 	signal	File_Wr		: std_logic;
-	signal	Tris_A_Rd	: std_logic;
+	signal	W_Wr		: std_logic;
+	signal	Port_A_Wr	: std_logic;
 	signal	Tris_A_Wr	: std_logic;
-	signal	Tris_B_Rd	: std_logic;
+	signal	Port_B_Wr	: std_logic;
 	signal	Tris_B_Wr	: std_logic;
 	signal	RAM_Data	: std_logic_vector(7 downto 0);
 	signal	Op_Bus		: std_logic_vector(7 downto 0);
+	signal	Op_Mux		: std_logic_vector(7 downto 0);
 	signal	Res_Bus		: std_logic_vector(7 downto 0);
 	signal	OPTION		: std_logic_vector(7 downto 0);
 	signal	INTCON		: std_logic_vector(7 downto 0);
+	signal	PortA		: std_logic_vector(7 downto 0);
+	signal	TrisA		: std_logic_vector(7 downto 0);
+	signal	PortB		: std_logic_vector(7 downto 0);
+	signal	TrisB		: std_logic_vector(7 downto 0);
+	signal	TMR			: std_logic_vector(7 downto 0);
+	signal	W			: std_logic_vector(7 downto 0);
+	signal	STATUS		: std_logic_vector(7 downto 0);
+	signal	FSR			: std_logic_vector(7 downto 0);
+	signal	PCLATH		: std_logic_vector(4 downto 0);
 	signal	Int_Trig	: std_logic;
 	signal	Int_Acc		: std_logic;
 	signal	Int_Ret		: std_logic;
@@ -131,19 +140,51 @@ begin
 	end generate;
 
 	-- Address decoder
-	File_CS(5) <= '1' when to_integer(unsigned(File_Addr_r(7 downto 0))) = 5 else '0';
-	File_CS(6) <= '1' when to_integer(unsigned(File_Addr_r(7 downto 0))) = 6 else '0';
-	Tris_A_Rd <= '1' when to_integer(unsigned(File_Addr_r(7 downto 0))) = 133 and File_Rd = '1' else '0';
-	Tris_B_Rd <= '1' when to_integer(unsigned(File_Addr_r(7 downto 0))) = 134 and File_Rd = '1' else '0';
+	Port_A_Wr <= '1' when to_integer(unsigned(File_Addr_r(7 downto 0))) = 5 and File_Wr = '1' else '0';
+	Port_B_Wr <= '1' when to_integer(unsigned(File_Addr_r(7 downto 0))) = 6 and File_Wr = '1' else '0';
 	Tris_A_Wr <= '1' when (to_integer(unsigned(File_Addr_r(7 downto 0))) = 133 and File_Wr = '1') or
 				Instruction(13 downto 0) = "00000001100101" else '0';
 	Tris_B_Wr <= '1' when (to_integer(unsigned(File_Addr_r(7 downto 0))) = 134 and File_Wr = '1') or
 				Instruction(13 downto 0) = "00000001100110" else '0';
-	RAM_CS <= '1' when File_Addr_r(6 downto 4) /= "000" or File_Addr_r(3 downto 2) = "11" else '0';
 	TMR_CS <= '1' when to_integer(unsigned(File_Addr_r(7 downto 0))) = 1 else '0';
 
+	-- Register selector
+	process (Clk)
+	begin
+		if Clk'event and Clk = '1' then
+			case to_integer(unsigned(File_Addr(7 downto 0))) is
+			when 1 => Op_Bus <= TMR;
+			when 129 => Op_Bus <= OPTION;
+			when 2 | 130 => Op_Bus <= ROM_Addr(7 downto 0);
+			when 3 | 131 => Op_Bus <= STATUS;
+			when 4 | 132 => Op_Bus <= FSR;
+			when 5 => Op_Bus <= PortA;
+			when 133 => Op_Bus <= TrisA;
+			when 6 => Op_Bus <= PortB;
+			when 134 => Op_Bus <= TrisB;
+			when 10 | 138 => Op_Bus(4 downto 0) <= PCLATH;
+			when 11 | 139 => Op_Bus <= INTCON;
+			when others => Op_Bus <= "--------";
+			end case;
+			if File_Wr = '1' and File_Addr_r = File_Addr then
+				-- Write through
+				Op_Bus <= Res_Bus;
+			end if;
+			RAM_CS <= '0';
+			if ROM_Data(InstructionLength - 1) = '1' then
+				Op_Bus <= W;
+				-- Write through
+				if W_Wr = '1' then
+					Op_Bus <= Res_Bus;
+				end if;
+			elsif File_Addr(6 downto 4) /= "000" or File_Addr(3 downto 2) = "11" then
+				RAM_CS <= '1';
+			end if;
+		end if;
+	end process;
+
 	-- Register File
-	Op_Bus <= RAM_Data when RAM_CS = '1' and File_Rd = '1' else "ZZZZZZZZ";
+	Op_Mux <= RAM_Data when RAM_CS = '1' else Op_Bus;
 	pr : PPX_RAM
 		generic map(Bottom => 12, Top => 79, AddrWidth => 7)
 		port map(
@@ -155,9 +196,6 @@ begin
 			Data_Out => RAM_Data);
 
 	-- Option Register
-	Op_Bus <= OPTION when
-			to_integer(unsigned(File_Addr_r(7 downto 0))) = 129 and
-			File_Rd = '1' else "ZZZZZZZZ";
 	process (Clk)
 	begin
 		if Clk'event and Clk = '1' then
@@ -174,22 +212,19 @@ begin
 	Int_Trig <= (INTCON(0) and INTCON(3)) or
 				(INTCON(1) and INTCON(4)) or
 				(INTCON(2) and INTCON(5));
-	Op_Bus <= INTCON when
-			to_integer(unsigned(File_Addr_r(7 downto 0))) = 11 and
-			File_Rd = '1' else "ZZZZZZZZ";
 	process (Reset_s_n, Clk)
 	begin
 		if Reset_s_n = '0' then
 			INTCON <= (others => '0');
 		elsif Clk'event and Clk = '1' then
-			if to_integer(unsigned(File_Addr_r(7 downto 0))) = 11 then
+			if to_integer(unsigned(File_Addr_r(6 downto 0))) = 11 then
 				INTCON <= Res_Bus;
 			end if;
 			if Int_Acc = '1' then
 				INTCON(7) <= '0';
 			end if;
 			if Int_Ret = '1' then
-				INTCON(7) <= '0';
+				INTCON(7) <= '1';
 			end if;
 			if TOF = '1' then
 				INTCON(2) <= '1';
@@ -226,10 +261,14 @@ begin
 			Int_Ret => Int_Ret,
 			File_Addr => File_Addr,
 			File_Addr_r => File_Addr_r,
-			File_Rd => File_Rd,
 			File_Wr => File_Wr,
+			W_Wr => W_Wr,
 			Instruction => Instruction,
-			Op_Bus => Op_Bus,
+			Op_Bus => Op_Mux,
+			W => W,
+			PCLATH => PCLATH,
+			STATUS => STATUS,
+			FSR => FSR,
 			Res_Bus => Res_Bus);
 
 	tmr0 : PPX_TMR
@@ -242,36 +281,31 @@ begin
 			PS => OPTION(2 downto 0),
 			PSA => OPTION(3),
 			TMR_Sel => TMR_CS,
-			Rd => File_Rd,
 			Wr => File_Wr,
 			Data_In => Res_Bus,
-			Data_Out => Op_Bus,
+			Data_Out => TMR,
 			TOF => TOF);
 
-	porta : PPX_Port
+	aport : PPX_Port
 		port map(
 			Clk => Clk,
 			Reset_n => Reset_s_n,
-			Port_CS => File_CS(5),
-			Rd => File_Rd,
-			Wr => File_Wr,
-			Tris_Rd => Tris_A_Rd,
+			Port_Wr => Port_A_Wr,
 			Tris_Wr => Tris_A_Wr,
 			Data_In => Res_Bus,
-			Data_Out => Op_Bus,
+			Port_In => PortA,
+			Tris => TrisA,
 			IOPort  => Port_A);
 
-	portb : PPX_Port
+	bport : PPX_Port
 		port map(
 			Clk => Clk,
 			Reset_n => Reset_s_n,
-			Port_CS => File_CS(6),
-			Rd => File_Rd,
-			Wr => File_Wr,
-			Tris_Rd => Tris_B_Rd,
+			Port_Wr => Port_B_Wr,
 			Tris_Wr => Tris_B_Wr,
 			Data_In => Res_Bus,
-			Data_Out => Op_Bus,
+			Port_In => PortB,
+			Tris => TrisB,
 			IOPort  => Port_B);
 
 end;

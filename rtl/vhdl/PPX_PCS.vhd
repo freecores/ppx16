@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0220
+-- Version : 0222
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -59,10 +59,8 @@ entity PPX_PCS is
 		Clk				: in std_logic;
 		Reset_n			: in std_logic;
 		CS				: in std_logic;
-		Rd				: in std_logic;
 		Wr				: in std_logic;
 		Data_In			: in std_logic_vector(7 downto 0);
-		Data_Out		: out std_logic_vector(7 downto 0);
 		Addr_In			: in std_logic_vector(PC_Width - 3 downto 0);
 		PCLATH			: in std_logic_vector(4 downto 0);
 		STATUS			: in std_logic_vector(6 downto 5);
@@ -87,19 +85,21 @@ architecture rtl of PPX_PCS is
 
 begin
 
-	Data_Out <= std_logic_vector(PC_i(7 downto 0)) when CS = '1' and Rd = '1' else "ZZZZZZZZ";
 	NPC <= std_logic_vector(NPC_i);
 
 	process (Clk)
 	begin
 		if Clk'event and Clk = '1' then
-			if Push = '1' or Int = '1' then
+			if Push = '1' then
 				Stack(to_integer(StackPtr)) <= PC_i;
+			end if;
+			if Int = '1' then
+				Stack(to_integer(StackPtr)) <= PC_i - 1;
 			end if;
 		end if;
 	end process;
 
-	process (PC_i, Sleep, CS, Wr, PCLATH, STATUS, Push, Pop, Goto, Int, Data_In, Addr_In, Stack, StackPtr)
+	process (PC_i, Sleep, CS, Wr, PCLATH, STATUS, Push, Pop, Goto, Data_In, Addr_In, Int, Stack, StackPtr)
 	begin
 		NPC_i <= PC_i;
 		if Sleep = '0' then

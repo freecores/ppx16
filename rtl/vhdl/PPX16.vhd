@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0220
+-- Version : 0222
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -70,11 +70,15 @@ entity PPX16 is
 		Int_Ret		: out std_logic;
 		File_Addr	: out std_logic_vector(InstructionLength - 6 downto 0);
 		File_Addr_r	: out std_logic_vector(InstructionLength - 6 downto 0);
-		File_Rd		: out std_logic;
 		File_Wr		: out std_logic;
+		W_Wr		: out std_logic;
 		Instruction	: out std_logic_vector(InstructionLength - 1 downto 0);
-		Op_Bus		: inout std_logic_vector(7 downto 0);
-		Res_Bus		: inout std_logic_vector(7 downto 0)
+		Op_Bus		: in std_logic_vector(7 downto 0);
+		W			: out std_logic_vector(7 downto 0);
+		STATUS		: out std_logic_vector(7 downto 0);
+		FSR			: out std_logic_vector(7 downto 0);
+		PCLATH		: out std_logic_vector(4 downto 0);
+		Res_Bus		: out std_logic_vector(7 downto 0)
 	);
 end PPX16;
 
@@ -83,40 +87,50 @@ architecture rtl of PPX16 is
 	-- File control
 	signal	File_Addr_i		: std_logic_vector(InstructionLength - 6 downto 0);
 	signal	File_Addr_i_r	: std_logic_vector(InstructionLength - 6 downto 0);
-	signal	File_Rd_i		: std_logic;
 	signal	File_Wr_i		: std_logic;
 	signal	PC_CS			: std_logic;
 
 	-- Registers
-	signal	STATUS			: std_logic_vector(7 downto 0);
-	signal	W				: std_logic_vector(7 downto 0);
-	signal	FSR				: std_logic_vector(7 downto 0);
-	signal	PCLATH			: std_logic_vector(4 downto 0);
+	signal	W_i				: std_logic_vector(7 downto 0);
+	signal	PCLATH_i		: std_logic_vector(4 downto 0);
+	signal	STATUS_i		: std_logic_vector(7 downto 0);
+	signal	FSR_i			: std_logic_vector(7 downto 0);
 	signal	NPC				: std_logic_vector(InstructionLength - 2 downto 0);
 
 	-- Registered instruction word
+	signal	Inst			: std_logic_vector(InstructionLength - 1 downto 0);
 
 	-- Control signals
-	signal	Inst			: std_logic_vector(InstructionLength - 1 downto 0);
+	signal	Res_Bus_i		: std_logic_vector(7 downto 0);
+	signal	Q				: std_logic_vector(7 downto 0);
 	signal	Op_Mux			: std_logic_vector(7 downto 0);
+	signal	STATUS_d_i		: std_logic_vector(7 downto 0);
 	signal	STATUS_d		: std_logic_vector(2 downto 0);
 	signal	STATUS_Wr		: std_logic_vector(2 downto 0);
 	signal	Z_Skip			: std_logic;
 	signal	B_Skip			: std_logic;
 	signal	Inst_Skip		: std_logic;
-	signal	W_Wr			: std_logic;
-	signal	W_Rd			: std_logic;
+	signal	W_Wr_i			: std_logic;
 	signal	Imm_Op			: std_logic;
 	signal	Push			: std_logic;
 	signal	Pop				: std_logic;
 	signal	Goto			: std_logic;
 	signal	IRet			: std_logic;
+	signal	A2Res			: std_logic;
 	signal	B2Res			: std_logic;
 	signal	Sleep			: std_logic;
 	signal	Sleep_r			: std_logic;
 	signal	Int				: std_logic;
+	signal	Int_Pending		: std_logic;
 
-begin 
+begin
+
+	Int_Acc <= Int;
+	W_Wr <= W_Wr_i;
+	W <= W_i;
+	STATUS <= STATUS_d_i;
+	PCLATH <= PCLATH_i;
+	FSR <= FSR_i;
 
 	-- Instruction register
 	Instruction <= Inst;
@@ -136,23 +150,20 @@ begin
 	-- File address
 	File_Addr <= File_Addr_i;
 	i12 : if InstructionLength = 12 generate
-		File_Addr_i <= FSR(6 downto 0) when
+		File_Addr_i <= FSR_i(6 downto 0) when
 -- pragma translate_off
 					is_x(ROM_Data) or
 -- pragma translate_on
 					unsigned(ROM_Data(4 downto 0)) = 0 else
-					FSR(6 downto 5) & ROM_Data(4 downto 0);
+					FSR_i(6 downto 5) & ROM_Data(4 downto 0);
 	end generate;
 	i14 : if InstructionLength = 14 generate
-		File_Addr_i <= STATUS(7) & FSR(7 downto 0) when
+		File_Addr_i <= STATUS_i(7) & FSR_i(7 downto 0) when
 -- pragma translate_off
 					is_x(ROM_Data) or
 -- pragma translate_on
 					unsigned(ROM_Data(6 downto 0)) = 0 else
-					STATUS(6 downto 5) & ROM_Data(6 downto 0);
-		Op_Bus(4 downto 0) <= PCLATH when
-				to_integer(unsigned(File_Addr_i_r(6 downto 0))) = 10 and
-				File_Rd_i = '1' else "ZZZZZ";
+					STATUS_i(6 downto 5) & ROM_Data(6 downto 0);
 	end generate;
 	process (Clk)
 	begin
@@ -166,63 +177,67 @@ begin
 	process (Reset_n, Clk)
 	begin
 		if Reset_n = '0' then
-			PCLATH <= "00000";
+			PCLATH_i <= "00000";
 		elsif Clk'event and Clk = '1' then
 			if to_integer(unsigned(File_Addr_i_r(6 downto 0))) = 10 and File_Wr_i = '1' then
-				PCLATH <= Res_Bus(4 downto 0);
+				PCLATH_i <= Res_Bus_i(4 downto 0);
 			end if;
 		end if;
 	end process;
 
 	-- Working register
-	Op_Bus <= W when W_Rd = '1' else "ZZZZZZZZ";
 	process (Clk)
 	begin
 		if Clk'event and Clk = '1' then
-			if W_Wr = '1' then
-				W <= Res_Bus;
+			if W_Wr_i = '1' then
+				W_i <= Res_Bus_i;
 			end if;
 		end if;
 	end process;
 
 	-- Status register
-	Op_Bus <= STATUS when
-			to_integer(unsigned(File_Addr_i_r(InstructionLength - 8 downto 0))) = 3 and
-			File_Rd_i = '1' else "ZZZZZZZZ";
+	process (STATUS_Wr, STATUS_d, STATUS_i, A2Res, Op_Bus)
+	begin
+		STATUS_d_i <= STATUS_i;
+		if STATUS_Wr(0) = '1' then
+			STATUS_d_i(0) <= STATUS_d(0);
+		end if;
+		if STATUS_Wr(1) = '1' then
+			STATUS_d_i(1) <= STATUS_d(1);
+		end if;
+		if STATUS_Wr(2) = '1' then
+			STATUS_d_i(2) <= STATUS_d(2);
+		end if;
+		if A2Res = '1' then
+			STATUS_d_i(2) <= '0';
+			if Op_Bus = "00000000" then
+				STATUS_d_i(2) <= '1';
+			end if;
+		end if;
+	end process;
 	process (Reset_n, Clk)
 	begin
 		if Reset_n = '0' then
-			STATUS <= "00011000";
+			STATUS_i <= "00011000";
 		elsif Clk'event and Clk = '1' then
 			if to_integer(unsigned(File_Addr_i_r(InstructionLength - 8 downto 0))) = 3 and
 				File_Wr_i = '1' then
-				STATUS <= Res_Bus;
+				STATUS_i <= Res_Bus_i;
 			else
-				if STATUS_Wr(0) = '1' then
-					STATUS(0) <= STATUS_d(0);
-				end if;
-				if STATUS_Wr(1) = '1' then
-					STATUS(1) <= STATUS_d(1);
-				end if;
-				if STATUS_Wr(2) = '1' then
-					STATUS(2) <= STATUS_d(2);
-				end if;
+				STATUS_i <= STATUS_d_i;
 			end if;
 		end if;
 	end process;
 
 	-- FSR Register
-	Op_Bus <= FSR when
-			to_integer(unsigned(File_Addr_i_r(InstructionLength - 8 downto 0))) = 4 and
-			File_Rd_i = '1' else "ZZZZZZZZ";
 	process (Reset_n, Clk)
 	begin
 		if Reset_n = '0' then
-			FSR <= "11111111";
+			FSR_i <= "11111111";
 		elsif Clk'event and Clk = '1' then
 			if to_integer(unsigned(File_Addr_i_r(InstructionLength - 8 downto 0))) = 4 and
 				File_Wr_i = '1' then
-				FSR <= Res_Bus;
+				FSR_i <= Res_Bus_i;
 			end if;
 		end if;
 	end process;
@@ -239,13 +254,11 @@ begin
 			Clk => Clk,
 			Reset_n => Reset_n,
 			CS => PC_CS,
-			Rd => File_Rd_i,
 			Wr => File_Wr_i,
-			Data_In => Res_Bus,
-			Data_Out => Op_Bus,
+			Data_In => Res_Bus_i,
 			Addr_In => Inst(InstructionLength - 4 downto 0),
-			PCLATH => PCLATH,
-			STATUS => STATUS(6 downto 5),
+			PCLATH => PCLATH_i,
+			STATUS => STATUS_i(6 downto 5),
 			NPC => NPC,
 			Int => Int,
 			Sleep => Sleep_r,
@@ -254,8 +267,9 @@ begin
 			Goto => Goto);
 
 	-- ALU
-	Op_Mux <= Inst(7 downto 0) when Imm_Op = '1' else W;
-	Res_Bus <= Op_Mux when B2Res = '1' else "ZZZZZZZZ";
+	Op_Mux <= Inst(7 downto 0) when Imm_Op = '1' else W_i;
+	Res_Bus <= Res_Bus_i;
+	Res_Bus_i <= Op_Bus when A2Res = '1' else Op_Mux when B2Res = '1' else Q;
 	alu : PPX_ALU
 		generic map(InstructionLength => InstructionLength)
 		port map(
@@ -263,26 +277,27 @@ begin
 			ROM_Data => ROM_Data,
 			A => Op_Bus,
 			B => Op_Mux,
-			Q => Res_Bus,
+			Q => Q,
 			Skip => Inst_Skip,
-			Carry => STATUS(0),
+			Carry => STATUS_i(0),
 			Z_Skip => Z_Skip,
 			STATUS_d => STATUS_d,
 			STATUS_Wr => STATUS_Wr);
 
 	-- Instruction decoder
-	File_Rd <= File_Rd_i;
 	File_Wr <= File_Wr_i;
-	Inst_Skip <= Z_Skip or B_Skip or Sleep_r;
+	Inst_Skip <= Z_Skip or B_Skip or Sleep_r or Int_Pending;
 	id : PPX_Ctrl
 		generic map(InstructionLength => InstructionLength)
 		port map(
+			Clk => Clk,
+			ROM_Data => ROM_Data,
 			Inst => Inst,
-			File_Rd => File_Rd_i,
+			Skip => Inst_Skip,
 			File_Wr => File_Wr_i,
-			W_Wr => W_Wr,
-			W_Rd => W_Rd,
+			W_Wr => W_Wr_i,
 			Imm_Op => Imm_Op,
+			A2Res => A2Res,
 			B2Res => B2Res,
 			Push => Push,
 			Pop => Pop,
@@ -291,13 +306,13 @@ begin
 			B_Skip => B_Skip,
 			Sleep => Sleep);
 
-	-- Interrupts and stuff
+	-- Interrupt
 	process (Reset_n, Clk)
 	begin
 		if Reset_n = '0' then
 			Sleep_r <= '0';
 			Int <= '0';
-			Int_Acc <= '0';
+			Int_Pending <= '0';
 			Int_Ret <= '0';
 		elsif Clk'event and Clk = '1' then
 			if Sleep = '1' then
@@ -306,12 +321,13 @@ begin
 			if Int_Trig = '1' then
 				Sleep_r <= '0';
 			end if;
-			if Int_Trig = '1' and GIE = '1' then -- extra check ???????????????
+			Int_Pending <= '0';
+			Int <= '0';
+			if Int_Trig = '1' and GIE = '1' and Int = '0' then
+				Int_Pending <= '1';
+			end if;
+			if Int_Pending = '1' and Int = '0' and (Z_Skip or B_Skip or Sleep_r) = '0' then
 				Int <= '1';
-				Int_Acc <= '1';
-			else
-				Int <= '0';
-				Int_Acc <= '0';
 			end if;
 			if IRet = '1' then
 				Int_Ret <= '1';

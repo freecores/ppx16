@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0146
+-- Version : 0221
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -54,56 +54,53 @@ entity PPX_Port is
 	port(
 		Clk			: in std_logic;
 		Reset_n		: in std_logic;
-		Port_CS		: in std_logic;
-		Rd			: in std_logic;
-		Wr			: in std_logic;
-		Tris_Rd		: in std_logic;
+		Port_Wr		: in std_logic;
 		Tris_Wr		: in std_logic;
 		Data_In		: in std_logic_vector(7 downto 0);
-		Data_Out	: out std_logic_vector(7 downto 0);
+		Port_In		: out std_logic_vector(7 downto 0);
+		Tris		: out std_logic_vector(7 downto 0);
 		IOPort		: inout std_logic_vector(7 downto 0)
 	);
 end PPX_Port;
 
 architecture rtl of PPX_Port is
 
-	signal Tris			: std_logic_vector(7 downto 0);
+	signal Tris_i		: std_logic_vector(7 downto 0);
 	signal Port_Output	: std_logic_vector(7 downto 0);
 	signal Port_Input	: std_logic_vector(7 downto 0);
 
 begin
 
-	IOPort(0) <= Port_Output(0) when Tris(0) = '0' else 'Z';
-	IOPort(1) <= Port_Output(1) when Tris(1) = '0' else 'Z';
-	IOPort(2) <= Port_Output(2) when Tris(2) = '0' else 'Z';
-	IOPort(3) <= Port_Output(3) when Tris(3) = '0' else 'Z';
-	IOPort(4) <= Port_Output(4) when Tris(4) = '0' else 'Z';
-	IOPort(5) <= Port_Output(5) when Tris(5) = '0' else 'Z';
-	IOPort(6) <= Port_Output(6) when Tris(6) = '0' else 'Z';
-	IOPort(7) <= Port_Output(7) when Tris(7) = '0' else 'Z';
+	Port_In <= Port_Input;
+	Tris <= Tris_i;
 
-	Data_Out <= Port_Input when Port_CS = '1' and Rd = '1' else "ZZZZZZZZ";
+	IOPort(0) <= Port_Output(0) when Tris_i(0) = '0' else 'Z';
+	IOPort(1) <= Port_Output(1) when Tris_i(1) = '0' else 'Z';
+	IOPort(2) <= Port_Output(2) when Tris_i(2) = '0' else 'Z';
+	IOPort(3) <= Port_Output(3) when Tris_i(3) = '0' else 'Z';
+	IOPort(4) <= Port_Output(4) when Tris_i(4) = '0' else 'Z';
+	IOPort(5) <= Port_Output(5) when Tris_i(5) = '0' else 'Z';
+	IOPort(6) <= Port_Output(6) when Tris_i(6) = '0' else 'Z';
+	IOPort(7) <= Port_Output(7) when Tris_i(7) = '0' else 'Z';
 
 	process (Clk)
 	begin
 		if Clk'event and Clk = '1' then
 			Port_Input <= IOPort;	-- Synchronise input
-			if Port_CS = '1' and Wr = '1' then
+			if Port_Wr = '1' then
 				Port_Output <= Data_In;
 				Port_Input <= Data_In;
 			end if;
 		end if;
 	end process;
 
-	Data_Out <= Tris when Tris_Rd = '1' else "ZZZZZZZZ";
-
 	process (Reset_n, Clk)
 	begin
 		if Reset_n = '0' then
-			Tris <= "11111111";
+			Tris_i <= "11111111";
 		elsif Clk'event and Clk = '1' then
 			if Tris_Wr = '1' then
-				Tris <= Data_In;
+				Tris_i <= Data_In;
 			end if;
 		end if;
 	end process;

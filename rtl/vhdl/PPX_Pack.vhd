@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0221
+-- Version : 0222
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -59,7 +59,7 @@ package PPX_Pack is
 		ROM_Data	: in std_logic_vector(InstructionLength - 1 downto 0);
 		A			: in std_logic_vector(7 downto 0);
 		B			: in std_logic_vector(7 downto 0);
-		Q			: inout std_logic_vector(7 downto 0);
+		Q			: out std_logic_vector(7 downto 0);
 		Skip		: in std_logic;
 		Carry		: in std_logic;
 		Z_Skip		: out std_logic;
@@ -73,12 +73,14 @@ package PPX_Pack is
 		InstructionLength : integer
 	);
 	port(
+		Clk			: in std_logic;
+		ROM_Data	: in std_logic_vector(InstructionLength - 1 downto 0);
 		Inst		: in std_logic_vector(InstructionLength - 1 downto 0);
-		File_Rd		: out std_logic;
+		Skip		: in std_logic;
 		File_Wr		: out std_logic;
 		W_Wr		: out std_logic;
-		W_Rd		: out std_logic;
 		Imm_Op		: out std_logic;
+		A2Res		: out std_logic;
 		B2Res		: out std_logic;
 		Push		: out std_logic;
 		Pop			: out std_logic;
@@ -99,10 +101,8 @@ package PPX_Pack is
 		Clk				: in std_logic;
 		Reset_n			: in std_logic;
 		CS				: in std_logic;
-		Rd				: in std_logic;
 		Wr				: in std_logic;
 		Data_In			: in std_logic_vector(7 downto 0);
-		Data_Out		: out std_logic_vector(7 downto 0);
 		Addr_In			: in std_logic_vector(PC_Width - 3 downto 0);
 		PCLATH			: in std_logic_vector(4 downto 0);
 		STATUS			: in std_logic_vector(6 downto 5);
@@ -133,11 +133,15 @@ package PPX_Pack is
 		Int_Ret		: out std_logic;
 		File_Addr	: out std_logic_vector(InstructionLength - 6 downto 0);
 		File_Addr_r	: out std_logic_vector(InstructionLength - 6 downto 0);
-		File_Rd		: out std_logic;
 		File_Wr		: out std_logic;
+		W_Wr		: out std_logic;
 		Instruction	: out std_logic_vector(InstructionLength - 1 downto 0);
-		Op_Bus		: inout std_logic_vector(7 downto 0);
-		Res_Bus		: inout std_logic_vector(7 downto 0)
+		Op_Bus		: in std_logic_vector(7 downto 0);
+		W			: out std_logic_vector(7 downto 0);
+		STATUS		: out std_logic_vector(7 downto 0);
+		FSR			: out std_logic_vector(7 downto 0);
+		PCLATH		: out std_logic_vector(4 downto 0);
+		Res_Bus		: out std_logic_vector(7 downto 0)
 	);
 	end component;
 
@@ -161,13 +165,11 @@ package PPX_Pack is
 	port(
 		Clk			: in std_logic;
 		Reset_n		: in std_logic;
-		Port_CS		: in std_logic;
-		Rd			: in std_logic;
-		Wr			: in std_logic;
-		Tris_Rd		: in std_logic;
+		Port_Wr		: in std_logic;
 		Tris_Wr		: in std_logic;
 		Data_In		: in std_logic_vector(7 downto 0);
-		Data_Out	: out std_logic_vector(7 downto 0);
+		Port_In		: out std_logic_vector(7 downto 0);
+		Tris		: out std_logic_vector(7 downto 0);
 		IOPort		: inout std_logic_vector(7 downto 0)
 	);
 	end component;
@@ -182,7 +184,6 @@ package PPX_Pack is
 		PS			: in std_logic_vector(2 downto 0);
 		PSA			: in std_logic;
 		TMR_Sel		: in std_logic;
-		Rd			: in std_logic;
 		Wr			: in std_logic;
 		Data_In		: in std_logic_vector(7 downto 0);
 		Data_Out	: out std_logic_vector(7 downto 0);

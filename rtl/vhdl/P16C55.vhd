@@ -1,7 +1,7 @@
 --
 -- PIC16C55 compatible microcontroller core
 --
--- Version : 0220
+-- Version : 0222
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -73,30 +73,39 @@ architecture rtl of P16C55 is
 	component ROM55
 		port(
 			Clk	: in std_logic;
-			A	: in std_logic_vector(8 downto 0);
+			A	: in std_logic_vector(ROMAddressWidth - 1 downto 0);
 			D	: out std_logic_vector(11 downto 0)
 		);
 	end component;
 
 	signal	Reset_s_n	: std_logic;
-	signal	ROM_Addr	: std_logic_vector(8 downto 0);
+	signal	ROM_Addr	: std_logic_vector(ROMAddressWidth - 1 downto 0);
 	signal	ROM_Data	: std_logic_vector(InstructionLength - 1 downto 0);
 	signal	Instruction	: std_logic_vector(InstructionLength - 1 downto 0);
 	signal	File_Addr	: std_logic_vector(InstructionLength - 6 downto 0);
 	signal	File_Addr_r	: std_logic_vector(InstructionLength - 6 downto 0);
-	signal	File_CS		: std_logic_vector(7 downto 5);
 	signal	RAM_CS		: std_logic;
 	signal	TMR_CS		: std_logic;
-	signal	File_Rd		: std_logic;
 	signal	File_Wr		: std_logic;
-	signal	Tris_Rd		: std_logic;
+	signal	W_Wr		: std_logic;
 	signal	Tris_A_Wr	: std_logic;
 	signal	Tris_B_Wr	: std_logic;
 	signal	Tris_C_Wr	: std_logic;
-	signal	RAM_Data	: std_logic_vector(7 downto 0);
+	signal	Port_A_Wr	: std_logic;
+	signal	Port_B_Wr	: std_logic;
+	signal	Port_C_Wr	: std_logic;
 	signal	Op_Bus		: std_logic_vector(7 downto 0);
+	signal	Op_Mux		: std_logic_vector(7 downto 0);
 	signal	Res_Bus		: std_logic_vector(7 downto 0);
+	signal	RAM_Data	: std_logic_vector(7 downto 0);
 	signal	OPTION		: std_logic_vector(5 downto 0);
+	signal	PortA		: std_logic_vector(7 downto 0);
+	signal	PortB		: std_logic_vector(7 downto 0);
+	signal	PortC		: std_logic_vector(7 downto 0);
+	signal	TMR			: std_logic_vector(7 downto 0);
+	signal	W			: std_logic_vector(7 downto 0);
+	signal	STATUS		: std_logic_vector(7 downto 0);
+	signal	FSR			: std_logic_vector(7 downto 0);
 	signal	Int_Trig	: std_logic;
 	signal	GIE			: std_logic;
 
@@ -127,18 +136,47 @@ begin
 	end generate;
 
 	-- Address decoder
-	Tris_Rd <= '0';
-	RAM_CS <= '1' when File_Addr_r(4 downto 3) /= "00" else '0';
 	TMR_CS <= '1' when to_integer(unsigned(File_Addr_r(4 downto 0))) = 1 else '0';
 	Tris_A_Wr <= '1' when Instruction(11 downto 0) = "000000000101" else '0';
 	Tris_B_Wr <= '1' when Instruction(11 downto 0) = "000000000110" else '0';
 	Tris_C_Wr <= '1' when Instruction(11 downto 0) = "000000000111" else '0';
-	File_CS(5) <= '1' when to_integer(unsigned(File_Addr_r(4 downto 0))) = 5 else '0';
-	File_CS(6) <= '1' when to_integer(unsigned(File_Addr_r(4 downto 0))) = 6 else '0';
-	File_CS(7) <= '1' when to_integer(unsigned(File_Addr_r(4 downto 0))) = 7 else '0';
+	Port_A_Wr <= '1' when to_integer(unsigned(File_Addr_r(4 downto 0))) = 5 and File_Wr = '1' else '0';
+	Port_B_Wr <= '1' when to_integer(unsigned(File_Addr_r(4 downto 0))) = 6 and File_Wr = '1' else '0';
+	Port_C_Wr <= '1' when to_integer(unsigned(File_Addr_r(4 downto 0))) = 7 and File_Wr = '1' else '0';
+
+	-- Register selector
+	process (Clk)
+	begin
+		if Clk'event and Clk = '1' then
+			case to_integer(unsigned(File_Addr(4 downto 0))) is
+			when 1 => Op_Bus <= TMR;
+			when 2 => Op_Bus <= ROM_Addr(7 downto 0);
+			when 3 => Op_Bus <= STATUS;
+			when 4 => Op_Bus <= FSR;
+			when 5 => Op_Bus <= PortA;
+			when 6 => Op_Bus <= PortB;
+			when 7 => Op_Bus <= PortC;
+			when others => Op_Bus <= "--------";
+			end case;
+			if File_Wr = '1' and File_Addr_r = File_Addr then
+				-- Write through
+				Op_Bus <= Res_Bus;
+			end if;
+			RAM_CS <= '0';
+			if ROM_Data(InstructionLength - 1) = '1' then
+				Op_Bus <= W;
+				-- Write through
+				if W_Wr = '1' then
+					Op_Bus <= Res_Bus;
+				end if;
+			elsif File_Addr(4 downto 3) /= "00" then
+				RAM_CS <= '1';
+			end if;
+		end if;
+	end process;
 
 	-- Register File
-	Op_Bus <= RAM_Data when RAM_CS = '1' and File_Rd = '1' ELSE "ZZZZZZZZ";
+	Op_Mux <= RAM_Data when RAM_CS = '1' else Op_Bus;
 	pr : PPX_RAM
 		generic map(Bottom => 8, Top => 31, AddrWidth => 5)
 		port map(
@@ -179,10 +217,13 @@ begin
 			GIE => GIE,
 			File_Addr => File_Addr,
 			File_Addr_r => File_Addr_r,
-			File_Rd => File_Rd,
 			File_Wr => File_Wr,
+			W_Wr => W_Wr,
 			Instruction => Instruction,
-			Op_Bus => Op_Bus,
+			Op_Bus => Op_Mux,
+			W => W,
+			STATUS => STATUS,
+			FSR => FSR,
 			Res_Bus => Res_Bus);
 
 	tmr0 : PPX_TMR port map(
@@ -194,45 +235,35 @@ begin
 			PS => OPTION(2 downto 0),
 			PSA => OPTION(3),
 			TMR_Sel => TMR_CS,
-			Rd => File_Rd,
 			Wr => File_Wr,
 			Data_In => Res_Bus,
-			Data_Out => Op_Bus);
+			Data_Out => TMR);
 
-	porta : PPX_Port port map(
+	aport : PPX_Port port map(
 			Clk => Clk,
 			Reset_n => Reset_s_n,
-			Port_CS => File_CS(5),
-			Rd => File_Rd,
-			Wr => File_Wr,
-			Tris_Rd => Tris_Rd,
+			Port_Wr => Port_A_Wr,
 			Tris_Wr => Tris_A_Wr,
 			Data_In => Res_Bus,
-			Data_Out => Op_Bus,
+			Port_In => PortA,
 			IOPort  => Port_A);
 
-	portb : PPX_Port port map(
+	bport : PPX_Port port map(
 			Clk => Clk,
 			Reset_n => Reset_s_n,
-			Port_CS => File_CS(6),
-			Rd => File_Rd,
-			Wr => File_Wr,
-			Tris_Rd => Tris_Rd,
+			Port_Wr => Port_B_Wr,
 			Tris_Wr => Tris_B_Wr,
 			Data_In => Res_Bus,
-			Data_Out => Op_Bus,
+			Port_In => PortB,
 			IOPort  => Port_B);
 
-	portc : PPX_Port port map(
+	cport : PPX_Port port map(
 			Clk => Clk,
 			Reset_n => Reset_s_n,
-			Port_CS => File_CS(7),
-			Rd => File_Rd,
-			Wr => File_Wr,
-			Tris_Rd => Tris_Rd,
+			Port_Wr => Port_C_Wr,
 			Tris_Wr => Tris_C_Wr,
 			Data_In => Res_Bus,
-			Data_Out => Op_Bus,
+			Port_In => PortC,
 			IOPort  => Port_C);
 
 end;

@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0146
+-- Version : 0222
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -51,14 +51,15 @@ use IEEE.numeric_std.all;
 
 entity PPX_ALU is
 	generic(
-		InstructionLength : integer
+		InstructionLength : integer;
+		TriState	: boolean := false
 	);
 	port (
 		Clk			: in std_logic;
 		ROM_Data	: in std_logic_vector(InstructionLength - 1 downto 0);
 		A			: in std_logic_vector(7 downto 0);
 		B			: in std_logic_vector(7 downto 0);
-		Q			: inout std_logic_vector(7 downto 0);
+		Q			: out std_logic_vector(7 downto 0);
 		Skip		: in std_logic;
 		Carry		: in std_logic;
 		Z_Skip		: out std_logic;
@@ -110,22 +111,58 @@ architecture rtl of PPX_ALU is
 	signal	Do_BITSET		: std_logic;
 	signal	Do_BITTESTCLR	: std_logic;
 	signal	Do_BITTESTSET	: std_logic;
-	signal	Do_CLR	: std_logic;
-	signal	Do_PASSA		: std_logic;
+	signal	Do_CLR			: std_logic;
 
 	signal	Inst_Top		: std_logic_vector(11 downto 0);
 
 	signal	Bit_Pattern		: std_logic_vector(7 downto 0);
 	signal	Bit_Test		: std_logic_vector(7 downto 0);
 
-	signal	IDD				: std_logic_vector(7 downto 0);
+	signal	Q_ID			: std_logic_vector(7 downto 0);
+	signal	Q_L				: std_logic_vector(7 downto 0);
+	signal	Q_C				: std_logic_vector(7 downto 0);
+	signal	Q_RR			: std_logic_vector(7 downto 0);
+	signal	Q_RL			: std_logic_vector(7 downto 0);
+	signal	Q_S				: std_logic_vector(7 downto 0);
+	signal	Q_BC			: std_logic_vector(7 downto 0);
+	signal	Q_BS			: std_logic_vector(7 downto 0);
 
 	signal	DC_i			: std_logic;
 	signal	AddSubRes		: std_logic_vector(8 downto 0);
 
+	signal	Q_i				: std_logic_vector(7 downto 0);
+
 begin
 
+	Q <= Q_i;
+
 	Inst_Top <= ROM_Data(InstructionLength - 1 downto InstructionLength - 12);
+
+	gNoTri : if not TriState generate
+		Q_i <= Q_ID when Do_INC = '1' or Do_DEC = '1' else
+			AddSubRes(7 downto 0) when Do_ADD = '1' OR Do_SUB = '1' else
+			Q_L when Do_AND = '1' or Do_OR = '1' or Do_XOR = '1' else
+			Q_C when Do_COM = '1' else
+			Q_RR when Do_RRF = '1' else
+			Q_RL when Do_RLF = '1' else
+			Q_S when Do_SWAP = '1' else
+			Q_BC when Do_BITCLR = '1' else
+			Q_BS when Do_BITSET = '1' else
+			"00000000";
+	end generate;
+
+	gTri : if TriState generate
+		Q_i <= Q_ID when Do_INC = '1' or Do_DEC = '1' else "ZZZZZZZZ";
+		Q_i <= AddSubRes(7 downto 0) when Do_ADD = '1' OR Do_SUB = '1' else "ZZZZZZZZ";
+		Q_i <= Q_L when Do_AND = '1' or Do_OR = '1' or Do_XOR = '1' else "ZZZZZZZZ";
+		Q_i <= Q_C when Do_COM = '1' else "ZZZZZZZZ";
+		Q_i <= Q_RR when Do_RRF = '1' else "ZZZZZZZZ";
+		Q_i <= Q_RL when Do_RLF = '1' else "ZZZZZZZZ";
+		Q_i <= Q_S when Do_SWAP = '1' else "ZZZZZZZZ";
+		Q_i <= Q_BC when Do_BITCLR = '1' else "ZZZZZZZZ";
+		Q_i <= Q_BS when Do_BITSET = '1' else "ZZZZZZZZ";
+		Q_i <= "00000000" when Do_CLR = '1' else "ZZZZZZZZ";
+	end generate;
 
 	process (Clk)
 	begin
@@ -147,7 +184,6 @@ begin
 			Do_BITTESTCLR <= '0';
 			Do_BITTESTSET <= '0';
 			Do_CLR <= '0';
-			Do_PASSA <= '0';
 			if Skip = '0' then
 				if InstructionLength = 12 then
 					if Inst_Top(11 downto 6) = "000111" then
@@ -241,10 +277,6 @@ begin
 					-- CLRF, CLRW
 					Do_CLR <= '1';
 				end if;
-				if Inst_Top(11 downto 6) = "001000" then
-					-- MOVF
-					Do_PASSA <= '1';
-				end if;
 			end if;
 
 			case Inst_Top(7 downto 5) is
@@ -268,38 +300,32 @@ begin
 		end if;
 	end process;
 
-	IDD <= std_logic_vector(unsigned(A) + 1) when Do_INC = '1' else
-			std_logic_vector(unsigned(A) - 1) when Do_DEC = '1' else "ZZZZZZZZ";
-	Q <= IDD when Do_INC = '1' or Do_DEC = '1' else "ZZZZZZZZ";
+	Q_ID <= std_logic_vector(unsigned(A) + 1) when Do_INC = '1' else
+			std_logic_vector(unsigned(A) - 1);
 
-	Q <= AddSubRes(7 downto 0) when (Do_ADD = '1' OR Do_SUB = '1') else "ZZZZZZZZ";
 	AddSub(A(3 downto 0), B(3 downto 0), Do_SUB, Do_SUB, AddSubRes(3 downto 0), DC_i);
 	AddSub(A(7 downto 4), B(7 downto 4), Do_SUB, DC_i, AddSubRes(7 downto 4), AddSubRes(8));
 
-	Q <= (A and B) when Do_AND = '1' else
+	Q_L <= (A and B) when Do_AND = '1' else
 		(A or B) when Do_OR = '1' else
-		(A xor B) when Do_XOR = '1' else "ZZZZZZZZ";
-	Q <= (not A) when Do_COM = '1' else "ZZZZZZZZ";
+		(A xor B);
+	Q_C <= (not A);
 
-	Q <= Carry & A(7 downto 1) when Do_RRF = '1' else "ZZZZZZZZ";
-	Q <= A(6 downto 0) & Carry when Do_RLF = '1' else "ZZZZZZZZ";
+	Q_RR <= Carry & A(7 downto 1);
+	Q_RL <= A(6 downto 0) & Carry;
 
-	Q <= A(3 downto 0) & A(7 downto 4) when Do_SWAP = '1' else "ZZZZZZZZ";
+	Q_S <= A(3 downto 0) & A(7 downto 4);
 
-	Q <= ((not Bit_Pattern) and A) when Do_BITCLR = '1' else "ZZZZZZZZ";
-	Q <= (Bit_Pattern or A) when Do_BITSET = '1' else "ZZZZZZZZ";
-
-	Q <= "00000000" when Do_CLR = '1' else "ZZZZZZZZ";
-
-	Q <= A when Do_PASSA = '1' else "ZZZZZZZZ";
+	Q_BC <= ((not Bit_Pattern) and A);
+	Q_BS <= (Bit_Pattern or A);
 
 	Bit_Test <= Bit_Pattern and A;
 
-	Z_Skip <= '1' when (Do_IDTEST = '1' and IDD = "00000000") or
+	Z_Skip <= '1' when (Do_IDTEST = '1' and Q_ID = "00000000") or
 					(Bit_Test /= "00000000" and Do_BITTESTSET = '1') or
 					(Bit_Test = "00000000" and Do_BITTESTCLR = '1') else '0';
 
-	STATUS_d(2) <= '1' when Q(7 downto 0) = "00000000" else '0';
+	STATUS_d(2) <= '1' when Q_i(7 downto 0) = "00000000" else '0';
 	STATUS_d(1) <= DC_i;
 	STATUS_d(0) <= A(0) when Do_RRF = '1' else
 					A(7) when Do_RLF = '1' else
@@ -309,7 +335,7 @@ begin
 	STATUS_Wr(2) <= '1' when Do_SUB = '1' or Do_ADD = '1' or
 		((Do_DEC = '1' or Do_INC = '1') and Do_IDTEST = '0') or
 		Do_AND = '1' or Do_OR = '1' or Do_XOR = '1' or
-		Do_CLR = '1' or Do_COM = '1' or Do_PASSA = '1' else '0';
+		Do_CLR = '1' or Do_COM = '1' else '0';
 	-- DC
 	STATUS_Wr(1) <= '1' when Do_SUB = '1' or Do_ADD = '1' else '0';
 	-- C

@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0146
+-- Version : 0221
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -61,7 +61,6 @@ entity PPX_TMR is
 		PS			: in std_logic_vector(2 downto 0);
 		PSA			: in std_logic;
 		TMR_Sel		: in std_logic;
-		Rd			: in std_logic;
 		Wr			: in std_logic;
 		Data_In		: in std_logic_vector(7 downto 0);
 		Data_Out	: out std_logic_vector(7 downto 0);
@@ -77,8 +76,9 @@ architecture rtl of PPX_TMR is
 
 begin
 
+	Data_Out <= TMR;
+
 	-- Registers and counter
-	Data_Out <= TMR when Rd = '1' and TMR_Sel = '1' else "ZZZZZZZZ";
 	process (Reset_n, Clk)
 	begin
 		if Reset_n = '0' then

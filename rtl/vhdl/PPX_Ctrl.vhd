@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0146
+-- Version : 0222
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -55,12 +55,14 @@ entity PPX_Ctrl is
 		InstructionLength : integer
 	);
 	port(
+		Clk			: in std_logic;
+		ROM_Data	: in std_logic_vector(InstructionLength - 1 downto 0);
 		Inst		: in std_logic_vector(InstructionLength - 1 downto 0);
-		File_Rd		: out std_logic;
+		Skip		: in std_logic;
 		File_Wr		: out std_logic;
 		W_Wr		: out std_logic;
-		W_Rd		: out std_logic;
 		Imm_Op		: out std_logic;
+		A2Res		: out std_logic;
 		B2Res		: out std_logic;
 		Push		: out std_logic;
 		Pop			: out std_logic;
@@ -75,42 +77,97 @@ architecture rtl of PPX_Ctrl is
 
 begin
 
-	File_Wr <= '1' when (Inst(InstructionLength - 1 downto InstructionLength - 2) = "00" and
-					Inst(InstructionLength - 7) = '1') or
-					Inst(InstructionLength - 1 downto InstructionLength - 3) = "010" else '0';
-	File_Rd <= not Inst(InstructionLength - 1);
-	W_Rd <= Inst(InstructionLength - 1);
 	Imm_Op <= Inst(InstructionLength - 1);
-	Goto <= '1' when Inst(InstructionLength - 1 downto InstructionLength - 3) = "101" else '0';
 
 	i12 : if InstructionLength = 12 generate
-		Push <= '1' when Inst(11 downto 8) = "1001" else '0'; -- CALL
-		Pop <= '1' when Inst(11 downto 8) = "1000" else '0'; -- RETLW
 		B_Skip <= '1' when Inst(11 downto 10) = "10" else '0';
-		Sleep <= '1' when Inst(11 downto 0) = "000000000011" else '0';
-		B2Res <= '1' when Inst(11 downto 8) = "1100" or -- MOVLW
-						Inst(11 downto 8) = "1000" or -- RETLW
-						Inst(11 downto 6) = "000000" else '0'; -- MOVWF/TRIS/OPTION and some others
+		Sleep <= '1' when ROM_Data(11 downto 0) = "000000000011" else '0';
 		W_Wr <= '1' when Inst(11 downto 8) = "1000" or
 					Inst(11 downto 10) = "11" or
 					(Inst(11 downto 10) = "00" and Inst(5) = '0' and Inst(9 downto 6) /= "0000") else '0';
 		IRet <= '0';
+		process (Clk)
+		begin
+			if Clk'event and Clk = '1' then
+				File_Wr <= '0';
+				Goto <= '0';
+				Push <= '0';
+				Pop <= '0';
+				A2Res <= '0';
+				B2Res <= '0';
+				if Skip = '0' then
+					if (ROM_Data(InstructionLength - 1 downto InstructionLength - 2) = "00" and
+						ROM_Data(InstructionLength - 7) = '1') or
+						ROM_Data(InstructionLength - 1 downto InstructionLength - 3) = "010" then
+						File_Wr <= '1';
+					end if;
+					if ROM_Data(InstructionLength - 1 downto InstructionLength - 3) = "101" then
+						Goto <= '1';
+					end if;
+					if ROM_Data(11 downto 8) = "1001" then -- CALL
+						Push <= '1';
+					end if;
+					if ROM_Data(11 downto 8) = "1000" then -- RETLW
+						Pop <= '1';
+					end if;
+					if ROM_Data(11 downto 6) = "001000" then
+						-- MOVF
+						A2Res <= '1';
+					end if;
+					if ROM_Data(11 downto 8) = "1100" or -- MOVLW
+						ROM_Data(11 downto 8) = "1000" or -- RETLW
+						ROM_Data(11 downto 6) = "000000" then -- MOVWF/TRIS/OPTION and some others
+						B2Res <= '1';
+					end if;
+				end if;
+			end if;
+		end process;
 	end generate;
 
 	i14 : if InstructionLength = 14 generate
-		Push <= '1' when Inst(13 downto 11) = "100" else '0'; -- CALL
-		Pop <= '1' when Inst(13 downto 10) = "1101" or -- RETLW
-				Inst(13 downto 1) = "0000000000100" else '0'; -- RETURN, RETFIE
 		B_Skip <= '1' when Inst(13 downto 12) = "10" or Inst(13 downto 10) = "1101" or
 				Inst(13 downto 1) = "0000000000100" else '0';
-		Sleep <= '1' when Inst(13 downto 0) = "00000001100011" else '0';
-		B2Res <= '1' when Inst(13 downto 10) = "1100" or -- MOVLW
-						Inst(13 downto 10) = "1101" or -- RETLW
-						Inst(13 downto 8) = "000000" else '0'; -- MOVWF/TRIS/OPTION and some others
+		Sleep <= '1' when ROM_Data(13 downto 0) = "00000001100011" else '0';
 		W_Wr <= '1' when Inst(13 downto 12) = "11" or
 					(Inst(13 downto 12) = "00" and Inst(7) = '0' and Inst(11 downto 8) /= "0000") else '0';
 		IRet <= '1' when Inst(13 downto 0) = "00000000001001" else '0'; -- RETFIE
+		process (Clk)
+		begin
+			if Clk'event and Clk = '1' then
+				File_Wr <= '0';
+				Goto <= '0';
+				Push <= '0';
+				Pop <= '0';
+				A2Res <= '0';
+				B2Res <= '0';
+				if Skip = '0' then
+					if (ROM_Data(InstructionLength - 1 downto InstructionLength - 2) = "00" and
+						ROM_Data(InstructionLength - 7) = '1') or
+						ROM_Data(InstructionLength - 1 downto InstructionLength - 3) = "010" then
+						File_Wr <= '1';
+					end if;
+					if ROM_Data(InstructionLength - 1 downto InstructionLength - 3) = "101" then
+						Goto <= '1';
+					end if;
+					if ROM_Data(13 downto 11) = "100" then
+						Push <= '1'; -- CALL
+					end if;
+					if ROM_Data(13 downto 10) = "1101" or -- RETLW
+						ROM_Data(13 downto 1) = "0000000000100" then -- RETURN, RETFIE
+						Pop <= '1';
+					end if;
+					if ROM_Data(13 downto 8) = "001000" then
+						-- MOVF
+						A2Res <= '1';
+					end if;
+					if ROM_Data(13 downto 10) = "1100" or -- MOVLW
+						ROM_Data(13 downto 10) = "1101" or -- RETLW
+						ROM_Data(13 downto 8) = "000000" then -- MOVWF/TRIS/OPTION and some others
+						B2Res <= '1';
+					end if;
+				end if;
+			end if;
+		end process;
 	end generate;
 
 end;
-
