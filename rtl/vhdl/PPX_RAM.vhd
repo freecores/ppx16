@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0146
+-- Version : 0221
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -61,7 +61,6 @@ entity PPX_RAM is
 		Clk			: in std_logic;
 		CS			: in std_logic;
 		Wr			: in std_logic;
-		Rd			: in std_logic;
 		Addr		: in std_logic_vector(AddrWidth - 1 downto 0);
 		Data_In		: in std_logic_vector(7 downto 0);
 		Data_Out	: out std_logic_vector(7 downto 0)
@@ -70,9 +69,10 @@ end PPX_RAM;
 
 architecture rtl of PPX_RAM is
 
-	type RAM_Image is array (Top downto Bottom) of std_logic_vector(7 downto 0);
+	type RAM_Image is array (Top downto 0) of std_logic_vector(7 downto 0);
 	signal	RAM			: RAM_Image;
-	signal	AddrReg		: std_logic_vector(AddrWidth - 1 downto 0);
+	signal	AddrRd		: std_logic_vector(AddrWidth - 1 downto 0);
+	signal	AddrWr		: std_logic_vector(AddrWidth - 1 downto 0);
 	signal	Tmp_Data	: std_logic_vector(7 downto 0);
 
 begin
@@ -80,23 +80,18 @@ begin
 	process (Clk)
 	begin
 		if Clk'event and Clk = '1' then
-			AddrReg <= Addr;
--- pragma translate_off
-			if to_integer(unsigned(Addr)) >= Bottom and to_integer(unsigned(Addr)) <= Top then
--- pragma translate_on
-				Tmp_Data <= RAM(to_integer(unsigned(Addr)));
--- pragma translate_off
-			end if;
--- pragma translate_on
+			AddrRd <= Addr;
+			AddrWr <= Addr;
 			if CS = '1' and Wr = '1' then
-				RAM(to_integer(unsigned(AddrReg))) <= Data_In;
-				if AddrReg = Addr then
-					Tmp_Data <=  Data_In;
-				end if;
+				RAM(to_integer(unsigned(AddrWr))) <= Data_In;
 			end if;
 		end if;
 	end process;
 
-	Data_Out <= Tmp_Data when CS = '1' and Rd = '1' ELSE "ZZZZZZZZ";
+	Data_Out <= RAM(to_integer(unsigned(AddrRd)))
+-- pragma translate_off
+		when to_integer(unsigned(Addr)) >= Bottom and to_integer(unsigned(Addr)) <= Top else "--------"
+-- pragma translate_on
+	;
 
 end;

@@ -95,6 +95,7 @@ architecture rtl of P16F84 is
 	signal	Tris_A_Wr	: std_logic;
 	signal	Tris_B_Rd	: std_logic;
 	signal	Tris_B_Wr	: std_logic;
+	signal	RAM_Data	: std_logic_vector(7 downto 0);
 	signal	Op_Bus		: std_logic_vector(7 downto 0);
 	signal	Res_Bus		: std_logic_vector(7 downto 0);
 	signal	OPTION		: std_logic_vector(7 downto 0);
@@ -142,16 +143,16 @@ begin
 	TMR_CS <= '1' when to_integer(unsigned(File_Addr_r(7 downto 0))) = 1 else '0';
 
 	-- Register File
+	Op_Bus <= RAM_Data when RAM_CS = '1' and File_Rd = '1' else "ZZZZZZZZ";
 	pr : PPX_RAM
 		generic map(Bottom => 12, Top => 79, AddrWidth => 7)
 		port map(
 			Clk => Clk,
 			CS => RAM_CS,
 			Wr => File_Wr,
-			Rd  => File_Rd,
 			Addr => File_Addr(6 downto 0),
 			Data_In => Res_Bus,
-			Data_Out => Op_Bus);
+			Data_Out => RAM_Data);
 
 	-- Option Register
 	Op_Bus <= OPTION when

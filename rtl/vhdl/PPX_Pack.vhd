@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0220
+-- Version : 0221
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -151,7 +151,6 @@ package PPX_Pack is
 		Clk			: in std_logic;
 		CS			: in std_logic;
 		Wr			: in std_logic;
-		Rd			: in std_logic;
 		Addr		: in std_logic_vector(AddrWidth - 1 downto 0);
 		Data_In		: in std_logic_vector(7 downto 0);
 		Data_Out	: out std_logic_vector(7 downto 0)
