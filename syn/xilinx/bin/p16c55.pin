@@ -1,0 +1,2 @@
+#NET "clock" LOC = "P77";
+#NET "rst_n" LOC = "P133";
