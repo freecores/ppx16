@@ -33,7 +33,7 @@ read -technology xis2 {
 
 pre_optimize
 
-optimize -hierarchy=auto
+optimize -hierarchy=auto -delay -pass 1 -pass 2 -pass 3 -pass 4
 
 optimize_timing
 
@@ -41,4 +41,4 @@ report_area
 
 report_delay
 
-write p16f84.edf
+write p16f84_leo.edf

@@ -19,20 +19,21 @@ set_xilinx_eqn
 load_library xis2
 
 read -technology xis2 {
-../../../rtl/vhdl/AX_Pack.vhd
-../../../rtl/vhdl/AX_Reg.vhd
-../../../rtl/vhdl/AX_ALU.vhd
-../../../rtl/vhdl/AX_PCS.vhd
-../../../rtl/vhdl/AX8.vhd
-../../../rtl/vhdl/AX_Port.vhd
-../../../rtl/vhdl/AX_TC8.vhd
-../src/ROM1200_Echo_leo.vhd
-../../../rtl/vhdl/A90S1200.vhd
+../../../rtl/vhdl/PPX_Pack.vhd
+../../../rtl/vhdl/PPX_ALU.vhd
+../../../rtl/vhdl/PPX_Ctrl.vhd
+../../../rtl/vhdl/PPX_PCS.vhd
+../../../rtl/vhdl/PPX16.vhd
+../../../rtl/vhdl/PPX_RAM.vhd
+../../../rtl/vhdl/PPX_Port.vhd
+../../../rtl/vhdl/PPX_TMR.vhd
+../src/ROM55_Test_leo.vhd
+../../../rtl/vhdl/P16C55.vhd
 }
 
 pre_optimize
 
-optimize -hierarchy=auto
+optimize -hierarchy=auto -delay -pass 1 -pass 2 -pass 3 -pass 4
 
 optimize_timing
 
@@ -40,4 +41,4 @@ report_area
 
 report_delay
 
-write a90s1200.edf
+write p16c55_leo.edf
