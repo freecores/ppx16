@@ -1,7 +1,7 @@
 --
 -- PIC16xx compatible microcontroller core
 --
--- Version : 0224
+-- Version : 0232
 --
 -- Copyright (c) 2001-2002 Daniel Wallner (jesus@opencores.org)
 --
@@ -46,6 +46,7 @@
 --
 -- File history :
 --
+--	0232 : Fixed bank decoding and FSR/PCLATH register access
 
 library IEEE;
 use IEEE.std_logic_1164.all;
@@ -92,8 +93,10 @@ architecture rtl of PPX16 is
 
 	-- Registers
 	signal	W_i				: std_logic_vector(7 downto 0);
+	signal	PCLATH_d		: std_logic_vector(4 downto 0);
 	signal	PCLATH_i		: std_logic_vector(4 downto 0);
 	signal	STATUS_i		: std_logic_vector(7 downto 0);
+	signal	FSR_d			: std_logic_vector(7 downto 0);
 	signal	FSR_i			: std_logic_vector(7 downto 0);
 	signal	NPC				: std_logic_vector(InstructionLength - 2 downto 0);
 
@@ -129,8 +132,8 @@ begin
 	W_Wr <= W_Wr_i;
 	W <= W_i;
 	STATUS <= STATUS_d_i;
-	PCLATH <= PCLATH_i;
-	FSR <= FSR_i;
+	PCLATH <= PCLATH_d;
+	FSR <= FSR_d;
 
 	-- Instruction register
 	Instruction <= Inst;
@@ -150,20 +153,20 @@ begin
 	-- File address
 	File_Addr <= File_Addr_i;
 	i12 : if InstructionLength = 12 generate
-		File_Addr_i <= FSR_i(6 downto 0) when
+		File_Addr_i <= FSR_d(6 downto 0) when
 -- pragma translate_off
 					is_x(ROM_Data) or
 -- pragma translate_on
 					unsigned(ROM_Data(4 downto 0)) = 0 else
-					FSR_i(6 downto 5) & ROM_Data(4 downto 0);
+					FSR_d(6 downto 5) & ROM_Data(4 downto 0);
 	end generate;
 	i14 : if InstructionLength = 14 generate
-		File_Addr_i <= STATUS_i(7) & FSR_i(7 downto 0) when
+		File_Addr_i <= STATUS_d_i(7) & FSR_d(7 downto 0) when
 -- pragma translate_off
 					is_x(ROM_Data) or
 -- pragma translate_on
 					unsigned(ROM_Data(6 downto 0)) = 0 else
-					STATUS_i(6 downto 5) & ROM_Data(6 downto 0);
+					STATUS_d_i(6 downto 5) & ROM_Data(6 downto 0);
 	end generate;
 	process (Clk)
 	begin
@@ -174,14 +177,15 @@ begin
 	end process;
 
 	-- PCLATH Register
+	PCLATH_d <= Res_Bus_i(4 downto 0) when
+		to_integer(unsigned(File_Addr_i_r(6 downto 0))) = 10 and File_Wr_i = '1'
+		else PCLATH_i;
 	process (Reset_n, Clk)
 	begin
 		if Reset_n = '0' then
 			PCLATH_i <= "00000";
 		elsif Clk'event and Clk = '1' then
-			if to_integer(unsigned(File_Addr_i_r(6 downto 0))) = 10 and File_Wr_i = '1' then
-				PCLATH_i <= Res_Bus_i(4 downto 0);
-			end if;
+			PCLATH_i <= PCLATH_d;
 		end if;
 	end process;
 
@@ -196,7 +200,7 @@ begin
 	end process;
 
 	-- Status register
-	process (STATUS_Wr, STATUS_d, STATUS_i, A2Res, Op_Bus)
+	process (STATUS_Wr, STATUS_d, STATUS_i, A2Res, Op_Bus, File_Addr_i_r, File_Wr_i, Res_Bus_i)
 	begin
 		STATUS_d_i <= STATUS_i;
 		if STATUS_Wr(0) = '1' then
@@ -214,31 +218,29 @@ begin
 				STATUS_d_i(2) <= '1';
 			end if;
 		end if;
+		if to_integer(unsigned(File_Addr_i_r(InstructionLength - 8 downto 0))) = 3 and File_Wr_i = '1' then
+			STATUS_d_i <= Res_Bus_i;
+		end if;
 	end process;
 	process (Reset_n, Clk)
 	begin
 		if Reset_n = '0' then
 			STATUS_i <= "00011000";
 		elsif Clk'event and Clk = '1' then
-			if to_integer(unsigned(File_Addr_i_r(InstructionLength - 8 downto 0))) = 3 and
-				File_Wr_i = '1' then
-				STATUS_i <= Res_Bus_i;
-			else
-				STATUS_i <= STATUS_d_i;
-			end if;
+			STATUS_i <= STATUS_d_i;
 		end if;
 	end process;
 
 	-- FSR Register
+	FSR_d <= Res_Bus_i when
+		to_integer(unsigned(File_Addr_i_r(InstructionLength - 8 downto 0))) = 4 and
+		File_Wr_i = '1' else FSR_i;
 	process (Reset_n, Clk)
 	begin
 		if Reset_n = '0' then
 			FSR_i <= "11111111";
 		elsif Clk'event and Clk = '1' then
-			if to_integer(unsigned(File_Addr_i_r(InstructionLength - 8 downto 0))) = 4 and
-				File_Wr_i = '1' then
-				FSR_i <= Res_Bus_i;
-			end if;
+			FSR_i <= FSR_d;
 		end if;
 	end process;
 
